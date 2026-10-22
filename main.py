@@ -13,7 +13,7 @@ import sys
 import pygame
 from courier_env import CourierEnv, UP, DOWN, LEFT, RIGHT
 from levels import LEVELS, RANDOM_BASELINE
-from agents import get_agent
+from agents import get_agent, RandomAgent
 from renderer import (W, H, CELL, BX, BY, Renderer, background, text, panel, draw_button,
                       draw_robot, alpha_circle)
 
@@ -47,7 +47,10 @@ class App:
         self.seed = random.randint(0, 10**6)
         self.obs, _ = self.env.reset(seed=self.seed)
         self.view = Renderer(self.env)
-        self.agent = get_agent(level, self.env)
+        # two brains: the trained one (if models/level1_q.npy exists) and the random one
+        self.agents = {"trained": get_agent(level, self.env, trained=True),
+                       "random": RandomAgent(self.env.action_space)}
+        self.agent = self.agents["trained"]
         self.over, self.info = False, {}
         self.timer, self.wait, self.paused = 0.0, 0.0, False
         self.interval = 0.25
@@ -115,6 +118,11 @@ class App:
                     self.paused = not self.paused
                 elif k in SPEEDS:
                     self.interval = SPEEDS[k]
+                elif k == pygame.K_t:                          # switch between trained and random robot
+                    self.agent = self.agents["random"] if self.agent is self.agents["trained"] else self.agents["trained"]
+                    self.new_game()
+                    self.games = self.delivered = 0
+                    self.scores = []
 
     # ------------------------------------------------------------ update
     def update(self, dt):
@@ -149,7 +157,7 @@ class App:
         text(s, "Can an AI learn to deliver a package?", (480, 298), 20, (148, 163, 184), True, False)
         for _, rect, label, sub in self.menu_btns:
             draw_button(s, rect, label, sub, rect.collidepoint(self.mouse))
-        text(s, "Week 1  -  Level 1 is ready, more levels unlock every week", (480, 605), 16, (100, 116, 139), True, False)
+        text(s, "Week 2  -  The robot can learn! More levels unlock every week", (480, 605), 16, (100, 116, 139), True, False)
 
     def draw_levels(self, s):
         title = "WATCH THE AI" if self.mode == "watch" else "PLAY IT YOURSELF"
@@ -207,7 +215,7 @@ class App:
             avg = sum(self.scores) / len(self.scores) if self.scores else 0
             lines = [self.agent.name, f"Games played: {self.games}",
                      f"Deliveries: {self.delivered}", f"Average score: {avg:.0f}", "",
-                     "SPACE pause   1-4 speed", "R reset stats   ESC back"]
+                     "T = switch trained / random", "SPACE pause   1-4 speed", "R reset stats   ESC back"]
             if self.paused:
                 text(s, "PAUSED", (p.right - 100, p.y + 20), 20, (251, 191, 36))
         for line in lines:
