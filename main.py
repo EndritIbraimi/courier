@@ -8,6 +8,7 @@ MODES:   "play"  = YOU control the robot (feel how hard it is for the AI)
          "watch" = the AI controls the robot
 """
 import math
+import os
 import random
 import sys
 import pygame
@@ -16,6 +17,22 @@ from levels import LEVELS, RANDOM_BASELINE
 from agents import get_agent, RandomAgent
 from renderer import (W, H, CELL, BX, BY, Renderer, background, text, panel, draw_button,
                       draw_robot, alpha_circle)
+
+MUSIC_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "music.wav")
+MUSIC_VOLUME = 0.35
+
+
+def start_music():
+    """Load the background music and loop it. Returns False if there is no audio."""
+    try:
+        pygame.mixer.init()
+        pygame.mixer.music.load(MUSIC_FILE)
+        pygame.mixer.music.set_volume(MUSIC_VOLUME)
+        pygame.mixer.music.play(-1)          # -1 = repeat forever
+        return True
+    except (pygame.error, FileNotFoundError):
+        return False
+
 
 # keyboard -> action (arrows and WASD both work)
 KEYS = {pygame.K_UP: UP, pygame.K_w: UP, pygame.K_DOWN: DOWN, pygame.K_s: DOWN,
@@ -32,6 +49,8 @@ class App:
         self.mode = None         # "play" or "watch"
         self.t = 0.0             # time since start, drives animations
         self.mouse = (0, 0)
+        self.music_ok = False    # True once the music started
+        self.music_on = True     # M key turns it on/off
         self.note = ""           # small message, e.g. "Level 2 is coming soon"
         # menu buttons
         self.menu_btns = [("play", pygame.Rect(300, 325, 360, 68), "PLAY IT YOURSELF", "Feel what the AI feels"),
@@ -100,7 +119,16 @@ class App:
                     else:
                         self.note = f"Level {lv['id']} is coming soon - new levels unlock every week!"
 
+    def toggle_music(self):
+        """M key: mute or unmute the music."""
+        if self.music_ok:
+            self.music_on = not self.music_on
+            pygame.mixer.music.set_volume(MUSIC_VOLUME if self.music_on else 0.0)
+
     def key(self, k):
+        if k == pygame.K_m:
+            self.toggle_music()
+            return
         if k == pygame.K_ESCAPE:
             if self.scene == "menu":
                 sys.exit()
@@ -157,6 +185,7 @@ class App:
         text(s, "Can an AI learn to deliver a package?", (480, 298), 20, (148, 163, 184), True, False)
         for _, rect, label, sub in self.menu_btns:
             draw_button(s, rect, label, sub, rect.collidepoint(self.mouse))
+        text(s, "M = music on / off", (480, 583), 14, (100, 116, 139), True, False)
         text(s, "Week 2  -  The robot can learn! More levels unlock every week", (480, 605), 16, (100, 116, 139), True, False)
 
     def draw_levels(self, s):
@@ -210,12 +239,12 @@ class App:
         if self.mode == "play":
             lines = ["Arrow keys or WASD to move", "Walk to the box, then to GOAL.",
                      "Each move costs 1 point.", "Hitting the edge costs 5.",
-                     f"A random robot averages {RANDOM_BASELINE}.", "", "R = restart     ESC = back"]
+                     f"A random robot averages {RANDOM_BASELINE}.", "", "R restart   ESC back   M music"]
         else:
             avg = sum(self.scores) / len(self.scores) if self.scores else 0
             lines = [self.agent.name, f"Games played: {self.games}",
                      f"Deliveries: {self.delivered}", f"Average score: {avg:.0f}", "",
-                     "T = switch trained / random", "SPACE pause   1-4 speed", "R reset stats   ESC back"]
+                     "T = switch trained / random", "SPACE pause   1-4 speed", "R reset   ESC back   M music"]
             if self.paused:
                 text(s, "PAUSED", (p.right - 100, p.y + 20), 20, (251, 191, 36))
         for line in lines:
@@ -241,6 +270,7 @@ def main():
     screen = pygame.display.set_mode((W, H))
     clock = pygame.time.Clock()
     app = App(screen)
+    app.music_ok = start_music()
     while True:
         dt = clock.tick(60) / 1000          # seconds since the last frame
         for e in pygame.event.get():

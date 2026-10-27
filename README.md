@@ -18,8 +18,10 @@ Semester project for Introduction to Artificial Intelligence.
 - agents.py      the AI brains: random robot and Q-learning robot
 - train.py       trains the robot and draws the learning chart
 - models/        the saved, trained robot (the "notebook")
+- assets/music.wav  background music (made by make_music.py); press M to mute
 - levels.py      level list, unlocked week by week
 
 ## Progress
 - Week 1: level 1, random robot, baseline score, menu and graphics
 - Week 2: Q-learning robot trained on level 1, learning chart, Watch mode uses the trained robot (T switches to random)
+- Week 2 bonus: background music
