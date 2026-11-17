@@ -9,8 +9,12 @@ import pygame
 from courier_env import MOVES
 
 W, H = 960, 640          # window size
-CELL = 104               # size of one map square
-BX, BY = 40, 80          # top-left corner of the map on screen
+CELL = 104               # size of one map square (in the big internal drawing)
+VB = 20                  # empty border around the map inside the internal drawing
+BOARD_POS = (20, 66)     # where the map appears on screen
+BOARD_PX = 560           # the map always fits in a 560 x 560 square on screen
+# NOTE: the map is first drawn BIG on a hidden canvas, then shrunk to fit.
+# That is how a 7x7 map fits on screen with the same drawing code as 5x5.
 
 # ---------------------------------------------------------------- helpers
 _fonts = {}
@@ -104,6 +108,9 @@ class Renderer:
 
     def __init__(self, env):
         self.env = env
+        self.cn = env.size * CELL + 2 * VB                     # canvas size
+        self.canvas = pygame.Surface((self.cn, self.cn), pygame.SRCALPHA)
+        self.scale = min(1.0, BOARD_PX / self.cn)              # shrink factor (1 for 5x5)
         self.t = 0.0
         self.shake = 0.0
         self.reset_view()
@@ -116,7 +123,7 @@ class Renderer:
 
     def center(self, pos):
         """Pixel centre of a grid square given as (row, col)."""
-        return BX + pos[1] * CELL + CELL / 2, BY + pos[0] * CELL + CELL / 2
+        return VB + pos[1] * CELL + CELL / 2, VB + pos[0] * CELL + CELL / 2
 
     def on_step(self, action, info):
         """Called after every move: start effects for what just happened."""
@@ -159,9 +166,13 @@ class Renderer:
         return (random.randint(-a, a), random.randint(-a, a)) if a else (0, 0)
 
     # ------------------------------------------------------------ drawing
-    def draw(self, s):
+    def draw(self, screen):
+        """Draw the map on the hidden canvas, then shrink it onto the screen."""
+        s = self.canvas
+        s.fill((0, 0, 0, 0))
         env = self.env
         self._board(s)
+        self._walls(s)
         self._goal(s)
         for i, pos in enumerate(self.trail):          # fading footprints
             alpha_circle(s, (34, 211, 238), 25 + i * 9, self.center(pos), 6)
@@ -174,17 +185,38 @@ class Renderer:
             panel(s, r, (239, 68, 68), int(self.flash * 400), 10)
         for p in self.particles:
             alpha_circle(s, p[5], int(255 * min(1, p[4])), (p[0], p[1]), 4)
+        img = self.canvas
+        if self.scale < 1:
+            size = int(self.cn * self.scale)
+            img = pygame.transform.smoothscale(self.canvas, (size, size))
+        screen.blit(img, (BOARD_POS[0] + (BOARD_PX - img.get_width()) // 2,
+                          BOARD_POS[1] + (BOARD_PX - img.get_height()) // 2))
+
+    def _walls(self, s):
+        """Brick walls: the robot cannot enter these squares."""
+        for (row, col) in self.env.walls:
+            rect = pygame.Rect(VB + col * CELL, VB + row * CELL, CELL, CELL).inflate(-6, -6)
+            pygame.draw.rect(s, (10, 15, 28), rect.move(0, 5), border_radius=8)     # shadow
+            pygame.draw.rect(s, (146, 64, 14), rect, border_radius=8)               # brick colour
+            for i in range(4):                                                      # mortar lines
+                y0 = rect.y + i * rect.h // 4
+                y1 = rect.y + (i + 1) * rect.h // 4
+                if i > 0:
+                    pygame.draw.line(s, (254, 215, 170), (rect.x + 3, y0), (rect.right - 3, y0), 2)
+                x = rect.x + (rect.w // 2 if i % 2 == 0 else rect.w // 4)
+                pygame.draw.line(s, (254, 215, 170), (x, y0 + 2), (x, y1), 2)
+            pygame.draw.rect(s, (251, 146, 60), rect, 3, border_radius=8)           # edge
 
     def _board(self, s):
         n = self.env.size
         size = n * CELL
-        frame = pygame.Rect(BX - 14, BY - 14, size + 28, size + 28)
+        frame = pygame.Rect(VB - 14, VB - 14, size + 28, size + 28)
         pygame.draw.rect(s, (6, 10, 20), frame.move(0, 8), border_radius=20)      # shadow
         pygame.draw.rect(s, (51, 65, 85), frame, border_radius=20)                # frame
         pygame.draw.rect(s, (250, 204, 21), frame.inflate(-10, -10), 2, border_radius=16)
         for r in range(n):
             for c in range(n):
-                rect = pygame.Rect(BX + c * CELL, BY + r * CELL, CELL, CELL).inflate(-3, -3)
+                rect = pygame.Rect(VB + c * CELL, VB + r * CELL, CELL, CELL).inflate(-3, -3)
                 base = (71, 85, 105) if (r + c) % 2 == 0 else (62, 76, 97)
                 pygame.draw.rect(s, base, rect, border_radius=8)
                 pygame.draw.line(s, (100, 116, 139), (rect.x + 8, rect.y + 2), (rect.right - 8, rect.y + 2), 2)

@@ -1,0 +1,8 @@
+LEVEL 1  (3000 practice games per run, 5 runs per algorithm)
+Test = 100 new games with exploring switched off, averaged over the 5 runs
+Learning score = average score of the last 500 practice games (exploring still ON)
+
+               Avg score   (+/-)   Delivered  Avg moves   Games to profit  Learning score
+Q-learning          50.5     0.0        100%        9.5               648            49.7
+SARSA               50.5     0.0        100%        9.5               579            49.8
+Random             -76.0                 10%       48.5                 -               -

@@ -13,9 +13,9 @@ import random
 import sys
 import pygame
 from courier_env import CourierEnv, UP, DOWN, LEFT, RIGHT
-from levels import LEVELS, RANDOM_BASELINE
-from agents import get_agent, RandomAgent
-from renderer import (W, H, CELL, BX, BY, Renderer, background, text, panel, draw_button,
+from levels import LEVELS, RANDOM_BASELINES
+from agents import load_agents
+from renderer import (W, H, BOARD_POS, BOARD_PX, Renderer, background, text, panel, draw_button,
                       draw_robot, alpha_circle)
 
 MUSIC_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "music.wav")
@@ -66,10 +66,11 @@ class App:
         self.seed = random.randint(0, 10**6)
         self.obs, _ = self.env.reset(seed=self.seed)
         self.view = Renderer(self.env)
-        # two brains: the trained one (if models/level1_q.npy exists) and the random one
-        self.agents = {"trained": get_agent(level, self.env, trained=True),
-                       "random": RandomAgent(self.env.action_space)}
-        self.agent = self.agents["trained"]
+        # all brains for this level: Q-learning, SARSA (if trained) and random.
+        # The T key cycles through them so we can compare the algorithms live.
+        self.agents = load_agents(level, self.env)
+        self.agent_key = list(self.agents)[0]
+        self.agent = self.agents[self.agent_key]
         self.over, self.info = False, {}
         self.timer, self.wait, self.paused = 0.0, 0.0, False
         self.interval = 0.25
@@ -146,8 +147,10 @@ class App:
                     self.paused = not self.paused
                 elif k in SPEEDS:
                     self.interval = SPEEDS[k]
-                elif k == pygame.K_t:                          # switch between trained and random robot
-                    self.agent = self.agents["random"] if self.agent is self.agents["trained"] else self.agents["trained"]
+                elif k == pygame.K_t:                          # next robot: Q-learning -> SARSA -> random
+                    keys = list(self.agents)
+                    self.agent_key = keys[(keys.index(self.agent_key) + 1) % len(keys)]
+                    self.agent = self.agents[self.agent_key]
                     self.new_game()
                     self.games = self.delivered = 0
                     self.scores = []
@@ -186,7 +189,7 @@ class App:
         for _, rect, label, sub in self.menu_btns:
             draw_button(s, rect, label, sub, rect.collidepoint(self.mouse))
         text(s, "M = music on / off", (480, 583), 14, (100, 116, 139), True, False)
-        text(s, "Week 2  -  The robot can learn! More levels unlock every week", (480, 605), 16, (100, 116, 139), True, False)
+        text(s, "Week 3  -  Walls, a bigger map and two learning methods", (480, 605), 16, (100, 116, 139), True, False)
 
     def draw_levels(self, s):
         title = "WATCH THE AI" if self.mode == "watch" else "PLAY IT YOURSELF"
@@ -220,7 +223,7 @@ class App:
         s.blit(stage, self.view.offset())
         text(s, f"COURIER  -  Level {lv['id']}: {lv['name']}", (40, 26), 28)
         # ---- right-hand info panel
-        p = pygame.Rect(610, BY - 14, 310, env.size * CELL + 28)
+        p = pygame.Rect(610, 66, 310, 548)
         panel(s, p, (15, 23, 42), 225, 20)
         x = p.x + 22
         head = "YOU ARE THE ROBOT" if self.mode == "play" else "AI IS PLAYING"
@@ -238,13 +241,13 @@ class App:
         y = p.y + 245
         if self.mode == "play":
             lines = ["Arrow keys or WASD to move", "Walk to the box, then to GOAL.",
-                     "Each move costs 1 point.", "Hitting the edge costs 5.",
-                     f"A random robot averages {RANDOM_BASELINE}.", "", "R restart   ESC back   M music"]
+                     "Each move costs 1 point.", "Edges and walls cost 5.",
+                     f"A random robot averages {RANDOM_BASELINES[self.level]}.", "", "R restart   ESC back   M music"]
         else:
             avg = sum(self.scores) / len(self.scores) if self.scores else 0
             lines = [self.agent.name, f"Games played: {self.games}",
                      f"Deliveries: {self.delivered}", f"Average score: {avg:.0f}", "",
-                     "T = switch trained / random", "SPACE pause   1-4 speed", "R reset   ESC back   M music"]
+                     "T = switch robot", "SPACE pause   1-4 speed", "R reset   ESC back   M music"]
             if self.paused:
                 text(s, "PAUSED", (p.right - 100, p.y + 20), 20, (251, 191, 36))
         for line in lines:
@@ -254,7 +257,7 @@ class App:
         if self.over:
             ok = self.info["delivered"]
             box = pygame.Rect(0, 0, 380, 150)
-            box.center = (BX + env.size * CELL // 2, BY + env.size * CELL // 2)
+            box.center = (BOARD_POS[0] + BOARD_PX // 2, BOARD_POS[1] + BOARD_PX // 2)
             panel(s, box, (15, 23, 42), 235, 20)
             pygame.draw.rect(s, (74, 222, 128) if ok else (248, 113, 113), box, 3, border_radius=20)
             text(s, "DELIVERED!" if ok else "OUT OF MOVES", (box.centerx, box.y + 42), 40, center=True,
