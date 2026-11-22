@@ -76,7 +76,7 @@ def draw_box(s, r):
     pygame.draw.rect(s, (120, 74, 30), r, 2, border_radius=5)
 
 
-def draw_robot(s, cx, cy, t, facing=(1, 0), carrying=False):
+def draw_robot(s, cx, cy, t, facing=(1, 0), carrying=False, battery=None):
     """The robot: wheels, body, glowing eyes, blinking lights, antenna.
     facing = (row change, column change) of its last move: eyes look that way."""
     cx, cy = int(cx), int(cy)
@@ -100,6 +100,10 @@ def draw_robot(s, cx, cy, t, facing=(1, 0), carrying=False):
     pygame.draw.circle(s, (248, 113, 113) if int(t * 3) % 2 else (153, 27, 27), (cx, cy - 39), 5)
     if carrying:
         draw_box(s, pygame.Rect(cx - 14, cy + 4, 28, 21))                          # cargo
+    if battery is not None:                                                        # little battery bar under the robot
+        pygame.draw.rect(s, (15, 23, 42), (cx - 23, cy + 33, 46, 8), border_radius=4)
+        col = (74, 222, 128) if battery > 0.5 else (251, 191, 36) if battery > 0.25 else (248, 113, 113)
+        pygame.draw.rect(s, col, (cx - 21, cy + 35, int(42 * max(0, battery)), 4), border_radius=2)
 
 
 class Renderer:
@@ -137,6 +141,11 @@ class Renderer:
                        [(74, 222, 128), (250, 204, 21), (56, 189, 248), (244, 114, 182)], 90)
         elif ev == "bump":
             self.shake, self.flash = 0.25, 0.3
+        elif ev == "charge":
+            self.burst(self.center(self.env.robot_pos), [(250, 204, 21), (56, 189, 248), (255, 255, 255)], 30)
+        elif ev == "dead":
+            self.shake, self.flash = 0.6, 0.6
+            self.burst(self.center(self.env.robot_pos), [(248, 113, 113), (100, 116, 139)], 40)
 
     def burst(self, pos, colors, n):
         for _ in range(n):
@@ -173,12 +182,14 @@ class Renderer:
         env = self.env
         self._board(s)
         self._walls(s)
+        self._chargers(s)
         self._goal(s)
         for i, pos in enumerate(self.trail):          # fading footprints
             alpha_circle(s, (34, 211, 238), 25 + i * 9, self.center(pos), 6)
         if not env.carrying:
             self._package(s)
-        draw_robot(s, self.px, self.py, self.t, self.facing, env.carrying)
+        frac = env.battery / env.battery_max if env.battery_max else None
+        draw_robot(s, self.px, self.py, self.t, self.facing, env.carrying, frac)
         if self.flash > 0:                            # red flash on a bump
             r = pygame.Rect(0, 0, CELL, CELL)
             r.center = self.center(env.robot_pos)
@@ -191,6 +202,21 @@ class Renderer:
             img = pygame.transform.smoothscale(self.canvas, (size, size))
         screen.blit(img, (BOARD_POS[0] + (BOARD_PX - img.get_width()) // 2,
                           BOARD_POS[1] + (BOARD_PX - img.get_height()) // 2))
+
+    def _chargers(self, s):
+        """Charging pads: yellow lightning bolt. Stepping on one refills the battery."""
+        for pos in self.env.chargers:
+            cx, cy = self.center(pos)
+            pulse = (math.sin(self.t * 4) + 1) / 2
+            alpha_circle(s, (250, 204, 21), int(35 + 45 * pulse), (cx, cy), 40)     # glow
+            pad = pygame.Rect(0, 0, CELL - 30, CELL - 30)
+            pad.center = (cx, cy - 4)
+            pygame.draw.rect(s, (30, 41, 59), pad, border_radius=12)
+            pygame.draw.rect(s, (250, 204, 21), pad, 3, border_radius=12)
+            bolt = [(cx + 6, cy - 28), (cx - 12, cy + 2), (cx - 1, cy + 2),
+                    (cx - 6, cy + 24), (cx + 14, cy - 8), (cx + 2, cy - 8)]
+            pygame.draw.polygon(s, (250, 204, 21), bolt)                           # lightning bolt
+            text(s, "CHARGE", (cx, cy + 41), 12, (253, 224, 71), True)
 
     def _walls(self, s):
         """Brick walls: the robot cannot enter these squares."""

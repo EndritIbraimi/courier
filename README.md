@@ -9,7 +9,7 @@ Semester project for Introduction to Artificial Intelligence.
     pip install -r requirements.txt
     python3 main.py             # the game: play yourself or watch the AI
     python3 play_random.py      # baseline: average score of 100 random games
-    python3 train.py --level 2  # week 3: train Q-learning AND SARSA, compare them (also --level 1)
+    python3 train.py --level 3  # train Q-learning AND SARSA and compare them (levels 1, 2 or 3)
 
 ## Files
 - main.py        menu, play mode, watch-the-AI mode
@@ -26,3 +26,4 @@ Semester project for Introduction to Artificial Intelligence.
 - Week 2: Q-learning robot trained on level 1, learning chart, Watch mode uses the trained robot (T switches to random)
 - Week 2 bonus: background music
 - Week 3: level 2 (7x7 map with walls), second algorithm (SARSA), Q-learning vs SARSA comparison
+- Week 4: level 3 (battery + charging pads), Q-learning vs SARSA again, battery meter in the game

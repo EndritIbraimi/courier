@@ -189,7 +189,7 @@ class App:
         for _, rect, label, sub in self.menu_btns:
             draw_button(s, rect, label, sub, rect.collidepoint(self.mouse))
         text(s, "M = music on / off", (480, 583), 14, (100, 116, 139), True, False)
-        text(s, "Week 3  -  Walls, a bigger map and two learning methods", (480, 605), 16, (100, 116, 139), True, False)
+        text(s, "Week 4  -  Battery level: plan ahead and recharge", (480, 605), 16, (100, 116, 139), True, False)
 
     def draw_levels(self, s):
         title = "WATCH THE AI" if self.mode == "watch" else "PLAY IT YOURSELF"
@@ -236,12 +236,22 @@ class App:
         full = env.steps / env.max_steps
         pygame.draw.rect(s, (251, 191, 36) if full > 0.75 else (56, 189, 248),
                          (bar.x, bar.y, int(bar.w * full), bar.h), border_radius=6)
+        dy = 0
+        if env.battery_max:                                    # battery meter (level 3)
+            text(s, f"BATTERY  {env.battery} / {env.battery_max}", (x, p.y + 198), 14, (148, 163, 184))
+            frac = env.battery / env.battery_max
+            bat = pygame.Rect(x, p.y + 220, 266, 12)
+            pygame.draw.rect(s, (51, 65, 85), bat, border_radius=6)
+            pygame.draw.rect(s, (74, 222, 128) if frac > 0.5 else (251, 191, 36) if frac > 0.25 else (248, 113, 113),
+                             (bat.x, bat.y, int(bat.w * frac), bat.h), border_radius=6)
+            dy = 44
         status = "Carrying the package!" if env.carrying else "Go find the package"
-        text(s, status, (x, p.y + 200), 18, (74, 222, 128) if env.carrying else (226, 232, 240))
-        y = p.y + 245
+        text(s, status, (x, p.y + 200 + dy), 18, (74, 222, 128) if env.carrying else (226, 232, 240))
+        y = p.y + 245 + dy
         if self.mode == "play":
             lines = ["Arrow keys or WASD to move", "Walk to the box, then to GOAL.",
                      "Each move costs 1 point.", "Edges and walls cost 5.",
+                     *(["Each move uses 1 battery.", "Yellow pads recharge you."] if env.battery_max else []),
                      f"A random robot averages {RANDOM_BASELINES[self.level]}.", "", "R restart   ESC back   M music"]
         else:
             avg = sum(self.scores) / len(self.scores) if self.scores else 0
@@ -256,11 +266,12 @@ class App:
         # ---- end-of-game banner on the map
         if self.over:
             ok = self.info["delivered"]
+            dead = self.info.get("dead")
             box = pygame.Rect(0, 0, 380, 150)
             box.center = (BOARD_POS[0] + BOARD_PX // 2, BOARD_POS[1] + BOARD_PX // 2)
             panel(s, box, (15, 23, 42), 235, 20)
             pygame.draw.rect(s, (74, 222, 128) if ok else (248, 113, 113), box, 3, border_radius=20)
-            text(s, "DELIVERED!" if ok else "OUT OF MOVES", (box.centerx, box.y + 42), 40, center=True,
+            text(s, "DELIVERED!" if ok else ("BATTERY EMPTY" if dead else "OUT OF MOVES"), (box.centerx, box.y + 42), 40, center=True,
                  color=(74, 222, 128) if ok else (248, 113, 113))
             text(s, f"Score {self.info['total_reward']:.0f}   in {self.info['steps']} moves", (box.centerx, box.y + 88), 22, center=True)
             hint = "Press R to play again" if self.mode == "play" else "Next game starting..."

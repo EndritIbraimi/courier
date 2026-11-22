@@ -24,6 +24,7 @@ STEP_PENALTY = -1.0      # every move costs 1 point -> the robot learns to hurry
 BUMP_PENALTY = -4.0      # extra penalty for hitting the map edge or a wall
 PICKUP_REWARD = 10.0     # bonus for picking up the package
 DELIVERY_REWARD = 50.0   # big bonus for delivering it (the real goal)
+DEAD_PENALTY = -20.0     # extra penalty if the battery runs empty (game over)
 
 # ---------------------------------------------------------------------------
 # LEVEL SETTINGS. Each level = map size, positions (row, col), walls, time limit.
@@ -37,6 +38,11 @@ LEVEL_CONFIG = {
             walls=[(1, 3), (2, 3), (3, 3), (4, 3),     # a long wall in the middle
                    (5, 1), (5, 2),                     # a wall protecting the goal
                    (2, 5), (3, 5)]),                   # a wall below the package
+    # Level 3 (week 4): battery. Every move uses 1 battery point. Stepping on a
+    # charging pad (chargers) refills it. An empty battery ends the game.
+    3: dict(size=7, package=(0, 5), goal=(6, 1), max_steps=100,
+            walls=[(1, 3), (2, 3), (3, 3), (5, 1), (5, 2)],
+            battery=16, chargers=[(4, 5), (2, 1)]),
 }
 
 
@@ -54,21 +60,27 @@ class CourierEnv(gym.Env):
         self.package_pos = cfg["package"]
         self.goal_pos = cfg["goal"]
         self.walls = set(cfg["walls"])          # squares the robot cannot enter
+        self.battery_max = cfg.get("battery")   # None = this level has no battery
+        self.chargers = set(cfg.get("chargers", []))   # charging pads
         self.random_start = random_start
         self.default_start = (self.size - 1, self.size - 1)
 
         self.action_space = spaces.Discrete(4)
         # The robot "sees" ONE number: which square it is on + carrying or not
-        self.observation_space = spaces.Discrete(self.size * self.size * 2)
+        # (+ how much battery is left, on levels that have a battery).
+        self.n_battery = (self.battery_max + 1) if self.battery_max else 1
+        self.observation_space = spaces.Discrete(self.size * self.size * 2 * self.n_battery)
 
         self.robot_pos = self.default_start
         self.carrying = False
+        self.battery = self.battery_max or 0
         self.steps = 0
         self.total_reward = 0.0
 
     def _get_obs(self):
         row, col = self.robot_pos
-        return (row * self.size + col) * 2 + int(self.carrying)
+        base = (row * self.size + col) * 2 + int(self.carrying)   # square + carrying
+        return base * self.n_battery + self.battery                # + battery left
 
     def reset(self, seed=None, options=None):
         """Start a brand-new game."""
@@ -78,12 +90,14 @@ class CourierEnv(gym.Env):
             while True:
                 pos = (int(self.np_random.integers(0, self.size)),
                        int(self.np_random.integers(0, self.size)))
-                if pos not in self.walls and pos not in (self.package_pos, self.goal_pos):
+                if (pos not in self.walls and pos not in self.chargers
+                        and pos not in (self.package_pos, self.goal_pos)):
                     break
             self.robot_pos = pos
         else:
             self.robot_pos = self.default_start
         self.carrying = False
+        self.battery = self.battery_max or 0       # always start with a full battery
         self.steps = 0
         self.total_reward = 0.0
         return self._get_obs(), {}
@@ -108,7 +122,15 @@ class CourierEnv(gym.Env):
             reward += BUMP_PENALTY
             event = "bump"
 
-        # 3) package rules (pick-up and delivery are automatic)
+        # 3) battery: every move uses 1 point. A charging pad refills it.
+        if self.battery_max:
+            self.battery -= 1
+            if self.robot_pos in self.chargers:
+                if self.battery < self.battery_max - 1:
+                    event = "charge"               # tells the graphics to show sparks
+                self.battery = self.battery_max
+
+        # 4) package rules (pick-up and delivery are automatic)
         if not self.carrying and self.robot_pos == self.package_pos:
             self.carrying = True
             reward += PICKUP_REWARD
@@ -118,10 +140,18 @@ class CourierEnv(gym.Env):
             terminated = True
             event = "deliver"
 
-        # 4) too many moves -> game cut off
+        # 5) empty battery (and not delivered) -> game over with a penalty
+        dead = False
+        if self.battery_max and self.battery <= 0 and not terminated:
+            dead = True
+            terminated = True
+            reward += DEAD_PENALTY
+            event = "dead"
+
+        # 6) too many moves -> game cut off
         truncated = self.steps >= self.max_steps and not terminated
 
         self.total_reward += reward
         info = {"steps": self.steps, "total_reward": self.total_reward,
-                "delivered": terminated, "event": event}
+                "delivered": event == "deliver", "dead": dead, "event": event}
         return self._get_obs(), reward, terminated, truncated, info

@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 from courier_env import CourierEnv
 from agents import QLearningAgent, SarsaAgent, model_path
 
-EPISODES = {1: 3000, 2: 6000}          # practice games per run (bigger map = more games)
+EPISODES = {1: 3000, 2: 6000, 3: 30000}          # practice games per run (bigger map = more games)
 EPS_START, EPS_END, EPS_DECAY_FRACTION = 1.0, 0.05, 0.7
 NAMES = {"qlearning": "Q-learning", "sarsa": "SARSA"}
 COLORS = {"qlearning": "#38BDF8", "sarsa": "#FBBF24"}
@@ -66,7 +66,8 @@ def evaluate(level, choose_action, games=100):
         res.append(info)
     return (np.mean([r["total_reward"] for r in res]),
             sum(r["delivered"] for r in res),
-            np.mean([r["steps"] for r in res]))
+            np.mean([r["steps"] for r in res]),
+            sum(r["dead"] for r in res))             # games that ended with an empty battery
 
 
 def games_to_profit(scores, window=100):
@@ -102,17 +103,19 @@ def main():
     rand = evaluate(level, lambda o, e: e.action_space.sample())
 
     # ------------------------------------------------------------ table
+    battery = CourierEnv(level=level).battery_max is not None      # extra column on battery levels
     lines = [f"LEVEL {level}  ({episodes} practice games per run, {runs} runs per algorithm)",
              f"Test = 100 new games with exploring switched off, averaged over the {runs} runs",
              "Learning score = average score of the last 500 practice games (exploring still ON)", "",
-             f"{'':<12}{'Avg score':>12}{'(+/-)':>8}{'Delivered':>12}{'Avg moves':>11}{'Games to profit':>18}{'Learning score':>16}"]
+             f"{'':<12}{'Avg score':>12}{'(+/-)':>8}{'Delivered':>12}{'Avg moves':>11}{'Games to profit':>18}{'Learning score':>16}" + (f"{'Battery empty':>15}" if battery else "")]
     for algo in NAMES:
         f = np.array(final[algo])
         p = [x for x in profit[algo] if x is not None]
         ptxt = f"{np.mean(p):.0f}" + ("" if len(p) == runs else f" ({len(p)}/{runs} runs)") if p else "never"
         lines.append(f"{NAMES[algo]:<12}{f[:, 0].mean():>12.1f}{f[:, 0].std():>8.1f}"
-                     f"{f[:, 1].mean():>11.0f}%{f[:, 2].mean():>11.1f}{ptxt:>18}{np.mean(online[algo]):>16.1f}")
-    lines.append(f"{'Random':<12}{rand[0]:>12.1f}{'':>8}{rand[1]:>11.0f}%{rand[2]:>11.1f}{'-':>18}{'-':>16}")
+                     f"{f[:, 1].mean():>11.0f}%{f[:, 2].mean():>11.1f}{ptxt:>18}{np.mean(online[algo]):>16.1f}"
+                     + (f"{f[:, 3].mean():>14.0f}%" if battery else ""))
+    lines.append(f"{'Random':<12}{rand[0]:>12.1f}{'':>8}{rand[1]:>11.0f}%{rand[2]:>11.1f}{'-':>18}{'-':>16}" + (f"{rand[3]:>14.0f}%" if battery else ""))
     text = "\n".join(lines)
     print("\n" + text)
     open(f"results_level{level}.txt", "w").write(text + "\n")
